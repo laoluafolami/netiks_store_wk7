@@ -1,0 +1,37 @@
+name: 🧹 Weekly ACR Cleanup
+
+on:
+  schedule:
+    # Runs every Sunday at 2:00 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch: # Allows you to manually trigger it for testing
+
+jobs:
+  purge-untagged:
+    name: Purge Untagged Images
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: 🔐 Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: 🧹 Run Server-Side ACR Purge Task
+        run: |
+          echo "Starting server-side ACR purge for untagged images older than 7 days..."
+          
+          # The '.*:.*' filter targets all repositories. 
+          # '--untagged' ensures we only delete dangling images, not active release tags.
+          # '--ago 7d' keeps images from the last week as a safety buffer.
+          az acr run \
+            --cmd "acr purge --filter '.*:.*' --untagged --ago 7d" \
+            --registry netiksstoreacrnu2gd1 \
+            /dev/null
+            
+          echo "✅ ACR Cleanup completed successfully!"

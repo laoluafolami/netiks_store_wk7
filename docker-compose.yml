@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     ports:
@@ -15,6 +16,7 @@ services:
     build:
       context: .
       dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -36,6 +38,7 @@ services:
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -50,6 +53,7 @@ services:
     build:
       context: .
       dockerfile: services/vendor-service/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -64,6 +68,7 @@ services:
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -78,6 +83,7 @@ services:
     build:
       context: .
       dockerfile: services/media-service/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -92,6 +98,7 @@ services:
     build:
       context: .
       dockerfile: services/admin-service/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -104,6 +111,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-netiks_store}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -120,6 +128,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     # REMOVED: ports (internal cache, no host exposure needed)
 
 volumes:

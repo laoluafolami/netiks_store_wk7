@@ -140,7 +140,7 @@ jobs:
             az login --identity
             
             echo "🐳 Logging into ACR..."
-            az acr login --name netiksstoreregistry
+            az acr login --name netiksstoreacrnu2gd1
             
             cd ~/netiks_store
             
@@ -152,7 +152,7 @@ jobs:
             # 2. Export the variables so Docker Compose can actually see them!
             export VERSION="$(git rev-parse HEAD | cut -c1-7)"
             export IMAGE_TAG="$(git rev-parse HEAD | cut -c1-7)"
-            export REGISTRY="netiksstoreregistry.azurecr.io"
+            export REGISTRY="netiksstoreacrnu2gd1.azurecr.io"
             echo "🚀 Deploying image tag: $IMAGE_TAG"
             
             # 3. Pull and start the containers
@@ -191,7 +191,7 @@ jobs:
             az login --identity
             
             echo "🐳 Logging into ACR..."
-            az acr login --name netiksstoreregistry
+            az acr login --name netiksstoreacrnu2gd1
             
             cd /home/deploy/netiks_store-staging
             
@@ -202,7 +202,7 @@ jobs:
             
             echo "🏷️ Getting the short SHA from the current Git commit..."
             export IMAGE_TAG="$(git rev-parse HEAD | cut -c1-7)"
-            export REGISTRY="netiksstoreregistry.azurecr.io"
+            export REGISTRY="netiksstoreacrnu2gd1.azurecr.io"
             echo "Using IMAGE_TAG=$IMAGE_TAG"
             
             echo "📦 Pulling SHA-tagged images..."

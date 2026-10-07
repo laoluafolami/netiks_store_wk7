@@ -121,10 +121,13 @@ jobs:
 
   deploy:
     name: 🚀 Deploy to Production
-    needs: [build-and-push, deploy-staging]  # 🌟 Wa
+    needs: [build-and-push, deploy-staging]  # 🌟 Waits for staging to finish!
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: production
+    environment: production # Triggers the manual approval prompt
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: 🚀 Deploy over SSH
@@ -142,34 +145,33 @@ jobs:
             echo "🐳 Logging into ACR..."
             az acr login --name netiksstoreacrnu2gd1
             
-            cd ~/netiks_store
+            echo "📂 Navigating to production directory..."
+            cd /home/deploy/netiks_store
             
-            # 1. Fetch the latest code FIRST
-            echo "📥 Fetching latest code..."
-            git fetch origin
-            git reset --hard origin/main
+            # 🌟 FIX: Check out the specific tag that triggered this run (e.g., v1.0.1)
+            echo "📥 Fetching tags and checking out version: ${{ github.ref_name }}"
+            git fetch --tags origin
+            git checkout --force "${{ github.ref_name }}"
             
-            # 2. Export the variables so Docker Compose can actually see them!
-            export VERSION="$(git rev-parse HEAD | cut -c1-7)"
-            export IMAGE_TAG="$(git rev-parse HEAD | cut -c1-7)"
+            # 🌟 FIX: Use the actual tag name as the IMAGE_TAG
+            echo "🏷️ Setting image tag to version: ${{ github.ref_name }}"
+            export IMAGE_TAG="${{ github.ref_name }}"
             export REGISTRY="netiksstoreacrnu2gd1.azurecr.io"
-            echo "🚀 Deploying image tag: $IMAGE_TAG"
             
-            # 3. Pull and start the containers
+            echo "📦 Pulling versioned images..."
             docker compose \
               -f docker-compose.yml \
               -f docker-compose.prod.yml \
               pull
             
+            echo "🚀 Starting production services..."
             docker compose \
               -f docker-compose.yml \
               -f docker-compose.prod.yml \
               up -d
             
-            docker compose \
-              -f docker-compose.yml \
-              -f docker-compose.prod.yml \
-              ps
+            echo "✅ Production deployment complete!"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
   deploy-staging:
     needs: build-and-push

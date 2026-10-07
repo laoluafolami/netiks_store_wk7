@@ -92,7 +92,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: 🐳 Login to ACR via OIDC
-        run: az acr login --name netiksstoreregistry
+        run: az acr login --name netiksstoreacrnu2gd1
 
       - name: 🏷️ Extract metadata for Docker tags
         id: meta

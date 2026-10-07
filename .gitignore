@@ -20,3 +20,5 @@ netiks_deploy_key
 netiks_deploy_key.pub
 docs/
 
+.terraform/
+.terraform.lock.hcl

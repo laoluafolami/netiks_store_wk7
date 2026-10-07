@@ -1,33 +1,31 @@
-# Production override for docker-compose.yml
-# Use: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-version: '3.8'
+# Production environment configuration
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 services:
   web:
-    image: netiksstoreregistry.azurecr.io/web:v1.3.0
+    image: ${REGISTRY}/web:${IMAGE_TAG}
     pull_policy: always
-  
+
   gateway:
-    image: netiksstoreregistry.azurecr.io/gateway:v1.3.0
+    image: ${REGISTRY}/gateway:${IMAGE_TAG}
     pull_policy: always
-  
+
   identity-service:
-    image: netiksstoreregistry.azurecr.io/identity-service:v1.3.0
+    image: ${REGISTRY}/identity-service:${IMAGE_TAG}
     pull_policy: always
-  
+
   vendor-service:
-    image: netiksstoreregistry.azurecr.io/vendor-service:v1.3.0
+    image: ${REGISTRY}/vendor-service:${IMAGE_TAG}
     pull_policy: always
-  
+
   catalog-service:
-    image: netiksstoreregistry.azurecr.io/catalog-service:v1.3.0
+    image: ${REGISTRY}/catalog-service:${IMAGE_TAG}
     pull_policy: always
-  
+
   media-service:
-    image: netiksstoreregistry.azurecr.io/media-service:v1.3.0
+    image: ${REGISTRY}/media-service:${IMAGE_TAG}
     pull_policy: always
-  
+
   admin-service:
-    image: netiksstoreregistry.azurecr.io/admin-service:v1.3.0
+    image: ${REGISTRY}/admin-service:${IMAGE_TAG}
     pull_policy: always

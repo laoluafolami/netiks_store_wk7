@@ -1,0 +1,5 @@
+# Copy this file to terraform.tfvars and fill in your actual values.
+# Do NOT commit terraform.tfvars to Git.
+
+admin_public_key = "ssh-rsa AAAA...your-public-key-here..."
+allowed_ssh_ips  = ["YOUR_PUBLIC_IP/32"]

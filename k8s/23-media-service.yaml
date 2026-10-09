@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-service
+  namespace: netiks
+spec:
+  selector:
+    app: media-service
+  ports:
+    - port: 8004
+      targetPort: 8004
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-uploads
+  namespace: netiks
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+  namespace: netiks
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: media-service
+  template:
+    metadata:
+      labels:
+        app: media-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: media-service
+          image: netiks/media-service:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8004
+          env:
+            - name: APP_NAME
+              value: media-service
+            - name: APP_PORT
+              value: "8004"
+          envFrom:
+            - configMapRef:
+                name: netiks-config
+            - secretRef:
+                name: netiks-secrets
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8004
+            periodSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8004
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8004
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: media-uploads

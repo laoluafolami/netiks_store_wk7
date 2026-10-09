@@ -1,0 +1,80 @@
+# ---- Service: the stable name 'postgres' that other Pods use to reach the database ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: netiks
+spec:
+  selector:
+    app: postgres          # traffic goes to Pods labelled app=postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+# ---- StatefulSet: runs the database Pod (named postgres-0) and gives it its own disk ----
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: netiks
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      enableServiceLinks: false     # stops Kubernetes injecting a clashing POSTGRES_PORT variable
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent   # use the image loaded into kind
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB            # database name comes from the ConfigMap
+              valueFrom:
+                configMapKeyRef:
+                  name: netiks-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER          # user and password come from the Secret
+              valueFrom:
+                secretKeyRef:
+                  name: netiks-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: netiks-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA                 # data lives in a subfolder of the disk, not its root
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:                  # Pod gets traffic only when the database accepts connections
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:            # automatically creates a 1Gi disk request named data-postgres-0
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

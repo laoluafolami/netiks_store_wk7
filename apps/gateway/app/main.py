@@ -7,7 +7,7 @@ from app.routes.system import router as system_router
 from app.routes.uploads import router as uploads_router
 from netiks_shared.health import health_router
 
-app = FastAPI(title="Netiks Store Gateway", version="0.1.0")
+app = FastAPI(title="Netiks Store Gateway", version="0.2.0")
 
 app.include_router(health_router)
 app.include_router(system_router, prefix="/api/v1")

@@ -1,0 +1,13 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Your computer's port 3001 is forwarded to port 30300 on the cluster node (the web NodePort)
+      - containerPort: 30300
+        hostPort: 3001
+        protocol: TCP
+      # Your computer's port 8000 is forwarded to port 30800 on the cluster node (the gateway NodePort)
+      - containerPort: 30800
+        hostPort: 8000
+        protocol: TCP

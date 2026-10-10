@@ -1,11 +1,317 @@
+<img width="878" height="367" alt="17" src="https://github.com/user-attachments/assets/453ac9de-6dbd-4e47-8345-fdf257ef15e9" /><img width="855" height="389" alt="16" src="https://github.com/user-attachments/assets/fc78bb17-cf5a-4fff-ac06-f6c50430b666" /># Netiks Store Kubernetes (K8s) Deployment
+
+**Repository link:** \[https://github.com/laoluafolami/netiks_store_wk7/edit/k8s-lab/README.md\]
+
+## Part 1: Understand the Basics
+
+**1. What is the difference between a container and a Pod? Why create a Deployment instead of a Pod?**
+
+A container is one running, isolated process created from an image. A Pod is Kubernetes' smallest deployable unit: a wrapper around one or more containers that share one IP address, network space and volumes, and that are scheduled and restarted together. A Deployment is used instead of a bare Pod because a bare Pod is not replaced if it is deleted or its node fails, cannot be scaled, and has no rolling update or rollback. A Deployment declares the desired number of identical Pods and keeps that state: it recreates lost Pods (self-healing), scales replicas up and down, and replaces Pods gradually during updates while keeping a revision history for rollback.
+
+**2. In Compose, gateway reaches http://identity-service:8001. What Kubernetes object makes this name resolve? What happens when the identity Pod is replaced?**
+
+A **Service** (type ClusterIP) named `identity-service`. The cluster DNS resolves that name to the Service's stable virtual IP, and the Service forwards traffic to Pods that match its label selector and are Ready. When the identity Pod is replaced, the new Pod gets a different IP address, but the Service name and ClusterIP stay the same. Kubernetes updates the Service's list of endpoints automatically as soon as the new Pod passes its readiness probe, so the gateway keeps calling `http://identity-service:8001` with no change. Requests only fail briefly if no Pod is ready at that moment.
+
+**3. What is the practical difference between a ConfigMap and a Secret? Why is a Secret not encryption?**
+
+Both hold key-value settings that Pods consume as environment variables or files. A ConfigMap is for non-sensitive configuration (URLs, ports, flags) and is stored and displayed as plain text. A Secret is for sensitive values (passwords, tokens, keys): it is a separate object type, so access can be restricted separately with RBAC, its values are not printed by `kubectl describe`, it can be encrypted at rest if the cluster is configured for that, and it is kept out of Git. A Secret is not encryption because its values are only base64-encoded, which anyone can reverse with `base64 -d`; anyone allowed to read the Secret object (or the cluster's etcd store, which is unencrypted by default) can read the real values.
+
+**4. Which probe decides whether a Pod receives traffic? Which one can cause a container to be restarted?**
+
+The **readiness** probe decides whether a Pod receives traffic: while it fails, the Pod is removed from the Service's endpoints (but not restarted). The **liveness** probe can cause a container to be restarted: when it keeps failing, the kubelet kills and restarts the container. (The startup probe only holds back the other two while the app starts; if it never succeeds within its limit the container is also restarted.)
+
+## Part 2: Map Compose to Kubernetes
+
+| Compose service | Kubernetes workload | Needs a Service? | Needs storage? | Replicas | Reason |
+| --- | --- | --- | --- | --- | --- |
+| web | Deployment | Yes (NodePort) | No | 2 | Stateless; browser-facing |
+| gateway | Deployment | Yes: ClusterIP `gateway` (used by web Pods) plus NodePort `gateway-external` (used by the browser) | No | 2 | Stateless, runs no migrations and holds no data, so it is safe to run two copies; single entry point to the APIs |
+| identity-service | Deployment | Yes (ClusterIP 8001) | No (its data is in PostgreSQL) | 1 | Depends on PostgreSQL and runs `alembic upgrade head` at startup; several replicas could run migrations at the same time |
+| vendor-service | Deployment | Yes (ClusterIP 8002) | No (its data is in PostgreSQL) | 1 | Same reason as identity-service |
+| catalog-service | Deployment | Yes (ClusterIP 8003) | No (its data is in PostgreSQL) | 1 | Same reason as identity-service |
+| media-service | Deployment with `strategy: Recreate` | Yes (ClusterIP 8004) | Yes (1Gi PVC mounted at /app/uploads) | 1 | Stores uploaded files on local disk; a ReadWriteOnce volume and plain files mean only one writer is safe |
+| admin-service | Deployment | Yes (ClusterIP 8005) | No | 1 | Internal only, no database access currently |
+| postgres | StatefulSet | Yes (ClusterIP) | Yes | 1 | Holds state and needs persistent storage |
+| redis | None: not deployed | No | No | 0 | Not required by the code (see decision below) |
+
+### Redis decision (with code evidence)
+
+Command used:
+
+```
+grep -rniI "redis" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.venv --exclude=uv.lock --exclude=package-lock.json
+grep -rn "REDIS_URL" --include=*.py .
+```
+
+<img width="1503" height="803" alt="1" src="https://github.com/user-attachments/assets/eb5eb9a5-8c83-4dc5-a6c0-696a14b23c9e" />
+
+**The grep output**
+
+Evidence and decision (confirm against your grep output, then edit): in `docker-compose.yml` the `redis` service is defined but no other service lists it under `depends_on`. `REDIS_URL` appears in `.env.example` \[and in the settings/config class at: PATH:LINE\], but \[no Python code opens a Redis connection or calls a Redis client\]. Because nothing uses Redis at runtime, **Redis is not required**. I did not deploy it and did not add `REDIS_URL` to the ConfigMap.
+
+### Media service storage investigation
+
+File read: `services/media-service/app/service.py`
+
+<img width="700" height="219" alt="2" src="https://github.com/user-attachments/assets/868cd574-a201-4f3e-a9fb-1c09ae280080" />
+
+**The code that writes uploads**
+
+Finding (confirm against the code, then edit): uploads are written as **files on the container's local filesystem** under the directory given by `UPLOAD_DIR` (`/app/uploads`), not to the database or object storage. Several replicas cannot safely share that storage: each replica would have its own private local folder, so a file uploaded through one replica would be missing from the others, and the PVC is `ReadWriteOnce` and the plain files have no locking between writers. Therefore media-service runs **one replica**, with a 1Gi PVC mounted at `/app/uploads` so files survive Pod restarts, and `strategy: Recreate` so the old Pod is stopped before the new one starts.
+
+## Part 3: Create the Cluster and Build the Images
+
+**`kubectl get nodes`** (the node must show Ready)
+
+**`kubectl get ns`**
+
+<img width="951" height="611" alt="3" src="https://github.com/user-attachments/assets/e9e156ee-29ef-473c-a998-6cbbe78b09ce" />
+
+**kubectl get nodes and kubectl get ns**
+
+**`docker images | grep netiks`**
+
+<img width="1001" height="331" alt="4" src="https://github.com/user-attachments/assets/00caa8cb-c00a-4f36-84ce-056ea870afd3" />
+
+
+**`docker exec netiks-control-plane crictl images | grep -E "netiks|postgres"`** (lists the seven netiks images and postgres:16-alpine)
+
+<img width="880" height="341" alt="5" src="https://github.com/user-attachments/assets/f84bf1e8-6255-4dc2-9404-f022031374a0" />
+
+Repo files for this Part: `k8s/kind-config.yaml`, `k8s/00-namespace.yaml`.
+
+## Part 4: Configuration and Secrets
+
+**`kubectl get configmap,secret`**
+
+<img width="753" height="305" alt="6" src="https://github.com/user-attachments/assets/7157477c-ce80-4b32-ad27-5f1c7635d75d" />
+
+
+
+**Credentials confirmation:** the Secret `netiks-secrets` was created directly on the cluster. The database user is `netiks_k8s`, and the password (48 random hex characters, from `openssl rand -hex 24`) and JWT secret (64 random hex characters, from `openssl rand -hex 32`) are randomly generated. All three differ from the `.env.example` defaults (`postgres` / `postgres` and the sample JWT secret). The values are not shown here, and only the template `k8s/02-secret.example.yaml` is committed.
+
+**Why is the ConfigMap allowed in Git but not the Secret? What does a Secret protect against, and what does it not protect against?**
+
+The ConfigMap holds only non-sensitive settings (service URLs, ports, database name, algorithm names), so publishing it exposes nothing and gives a versioned, reviewable record of the configuration. The Secret holds credentials; anything committed to Git is copied to every clone and stays in history even if deleted later, so a committed secret must be treated as leaked. Only a template with `REPLACE_ME` placeholders is committed, and real values are created directly in the cluster.
+
+A Secret protects against: credentials being baked into images or written in manifests and Git; casual exposure (values are not shown by `kubectl describe` or in plain YAML); and wide access, because RBAC can restrict who may read Secrets and only Pods that reference one receive it. It does **not** protect against: anyone with permission to read the Secret (base64 decodes instantly); anyone with access to etcd or node storage when encryption at rest is not enabled; anyone who can exec into a Pod that uses it or read its environment; or leakage through logs and mistakes such as pasting `kubectl get secret -o yaml`.
+
+## Part 5: Deploy PostgreSQL
+
+**`kubectl get pods`** (PostgreSQL Pod Running)
+
+<img width="840" height="226" alt="7" src="https://github.com/user-attachments/assets/eed49017-221f-48e0-b75e-b52b6c86023c" />
+
+**`kubectl get pvc`** (PVC Bound)
+
+**\[PASTE OUTPUT\]**
+
+**`kubectl get statefulset`**
+
+**\[PASTE OUTPUT\]**
+
+**`kubectl get storageclass`**
+
+**\[PASTE OUTPUT\]**
+
+**\[INSERT SCREENSHOT 7\]**
+
+**`kubectl exec postgres-0 -- psql -U netiks_k8s -d netiks_store -c '\conninfo'`**
+
+<img width="1100" height="276" alt="8" src="https://github.com/user-attachments/assets/4c4c4408-3705-4d6b-b6be-3c7359ef7782" />
+
+
+### Pod deletion test
+
+Commands run: create table `lab_test` and insert a row; `SELECT * FROM lab_test;`; `kubectl delete pod postgres-0`; wait for the replacement Pod; `SELECT * FROM lab_test;` again.
+
+<img width="1450" height="634" alt="9" src="https://github.com/user-attachments/assets/679256d9-4ff0-41d9-a3f1-ae8d2e323475" />
+
+
+Result: the row was still present after the Pod was replaced, because the data is stored on the PersistentVolume behind PVC `data-postgres-0`, not in the Pod's own filesystem. The StatefulSet recreated a Pod with the same name and re-attached the same volume.
+
+### What would differ if `kubectl delete pvc data-postgres-0` were run?
+
+Deleting the Pod leaves the PVC and its volume untouched, so the data survives. Deleting the PVC removes the storage itself. Because kind's `standard` StorageClass has reclaim policy `Delete` \[confirm in the RECLAIMPOLICY column of your `kubectl get storageclass` output\], the underlying PersistentVolume and its data are deleted permanently. A PVC that is in use first stays `Terminating` (protected) until the Pod using it is gone. The StatefulSet then creates a new, empty PVC for the replacement Pod, so PostgreSQL would start with a brand-new empty database and every table and row, including `lab_test` and the application's data, would be lost. \[If you ran the optional demonstration, paste its output here.\]
+
+## Part 6: Deploy the Backend Services
+
+**admin-service initContainer decision:** \[I kept / I removed\] the PostgreSQL wait initContainer because \[kept: Compose makes admin-service depend on a healthy PostgreSQL and I could not rule out database access at startup, so keeping it matches Compose and is harmless / removed: the service has no database access (my grep of services/admin-service found no postgres, alembic or sqlalchemy usage), so waiting for the database only delays startup\].
+
+**`kubectl get deploy,pods,svc,pvc`**
+
+<img width="1202" height="664" alt="10" src="https://github.com/user-attachments/assets/a2a48579-727b-477d-9fc2-eafae730453d" />
+
+
+**Gateway connectivity test**
+
+```
+kubectl exec deployment/gateway -- python -c "import urllib.request as u; [print(s, u.urlopen(f'http://{s}/health/ready').read()) for s in ['identity-service:8001','vendor-service:8002','catalog-service:8003','media-service:8004']]"
+```
+
+<img width="1494" height="294" alt="11" src="https://github.com/user-attachments/assets/448590e5-070f-4e9b-9ae6-dacdc69a3f07" />
+
+
+Repo files for this Part: `k8s/20-catalog-service.yaml` to `k8s/25-gateway.yaml`.
+
+## Part 7: Deploy and Expose the Frontend
+
+<img width="1465" height="952" alt="12" src="https://github.com/user-attachments/assets/acebbc87-cde2-4630-9fd8-43eaf8f4c735" />
+
+**Browser at http://localhost:3001/ with the URL visible**
+
+**Registration / login evidence:**
+
+<img width="1417" height="958" alt="13" src="https://github.com/user-attachments/assets/7986ba3e-3356-41f3-8bd2-c358fc5fb451" />
+
+**Successful registration and login**
+
+<img width="1503" height="986" alt="14" src="https://github.com/user-attachments/assets/8edf3f43-31d4-4770-a754-59a722788d43" />
+
+**Market page**
+
+
+
+
+**`curl -fsS http://localhost:8000/health/live`**
+**`curl -fsS http://localhost:8000/health/ready`**
+**`curl -I http://localhost:3001`**
+
+<img width="975" height="363" alt="15" src="https://github.com/user-attachments/assets/93890cc4-64e8-4768-9bfe-7cb89f898f86" />
+**The three curl outputs**
+
+Repo files for this Part: `k8s/30-web.yaml`, updated `k8s/25-gateway.yaml` (added the `gateway-external` NodePort Service).
+
+## Part 8: Operate the Cluster
+
+### 8a. Self-healing
+
+Commands: `kubectl get pods -l app=gateway`, `kubectl delete pod <gateway-pod-name>`, `kubectl get pods -l app=gateway -w`
+
+<img width="855" height="389" alt="16" src="https://github.com/user-attachments/assets/62dc14c0-0a3b-42fd-9ad3-3788bd684059" />
+
+- Original Pods: \[names\]
+- Deleted Pod: \[name\]
+- Replacement Pod: \[new name\]
+- Final healthy state: \[two gateway Pods 1/1 Running\]
+
+The Deployment controller continuously compares the desired replica count (2) with the actual count and created a replacement Pod as soon as one was deleted.
+
+### 8b. Scaling
+
+Commands: `kubectl scale deployment/web --replicas=3`, `kubectl get pods -l app=web`, `kubectl scale deployment/web --replicas=2`
+
+<img width="878" height="367" alt="17" src="https://github.com/user-attachments/assets/555f1028-94ef-4b1a-919c-d3414fb56dae" />
+
+Replica count changed from 2 to 3 and back to 2: \[describe what you saw\].
+
+
+### 8c. Rolling update
+
+I changed the FastAPI version in `apps/gateway/app/main.py` from 0.1.0 to 0.2.0, built and loaded `netiks/gateway:v2`, ran the request loop in a second terminal, and ran `kubectl set image deployment/gateway gateway=netiks/gateway:v2`.
+
+
+<img width="714" height="476" alt="18" src="https://github.com/user-attachments/assets/9c8c61df-9747-4f31-9cdb-8c154eed43b4" />
+
+<img width="1012" height="540" alt="18b" src="https://github.com/user-attachments/assets/31ee9981-0683-4223-a61c-2e54ee6c488e" />
+
+**Rollout status, rollout history and both version checks**
+
+- Version before the update: \[0.1.0\]
+- Version after the update: \[0.2.0\]
+- Whether any requests failed: \[no, every response in the loop was 200 (counts: ...) / describe any failures\]
+
+The update was gradual: new Pods were started and had to become Ready before old Pods were removed, so the Service always had healthy Pods behind it. The version change was committed as its own commit.
+
+### 8d. Failed rollout and rollback
+
+Commands: `kubectl set image deployment/gateway gateway=netiks/gateway:does-not-exist`, `kubectl rollout status deployment/gateway --timeout=60s`, `kubectl get pods -l app=gateway`, `kubectl describe pod <new-failing-pod>`, `kubectl rollout undo deployment/gateway`, `kubectl rollout status deployment/gateway`
+
+<img width="1495" height="825" alt="19" src="https://github.com/user-attachments/assets/1f4835b6-7d36-4129-b0b8-edd1b22a586f" />
+
+<img width="947" height="833" alt="19b" src="https://github.com/user-attachments/assets/fde3cb19-a6ef-4d72-be3c-f3eac3aaf606" />
+
+Observations: the new Pod showed \[ErrImagePull / ImagePullBackOff\] because the image `netiks/gateway:does-not-exist` does not exist. The old healthy Pods \[kept serving traffic and the loop kept returning 200\] because Kubernetes does not remove old Pods until a new Pod is Ready. After `kubectl rollout undo` the Deployment returned to its previous working revision (the v2 image) and the application answered normally again, reporting version \[0.2.0\].
+
+### 8e. Controlled incident
+
+Commands: `kubectl scale deployment/catalog-service --replicas=0`, then `kubectl get pods`, `kubectl get endpoints catalog-service`, `kubectl logs deployment/gateway --tail=50`, then `kubectl scale deployment/catalog-service --replicas=1` and `kubectl get pods`.
+
+**What the user sees on the Market page during the outage:** \[describe exactly what you saw\]
+
+<img width="1530" height="628" alt="20" src="https://github.com/user-attachments/assets/9eedcedc-6441-4307-9c5c-91e04bcc9606" />
+
+**Market page during the outage**
+
+<img width="789" height="336" alt="21" src="https://github.com/user-attachments/assets/174b0c70-e6e8-48a4-9474-a4741d93f488" />
+
+<img width="924" height="854" alt="21b" src="https://github.com/user-attachments/assets/011f91e7-b82b-4754-b070-8f395f3f4445" />
+
+**OUTPUT of get pods, get endpoints and gateway logs**
+
+
+<img width="1513" height="980" alt="22" src="https://github.com/user-attachments/assets/c97a1838-deb2-438a-aab8-b705b9726162" />
+
+**Recovered Pods and working Market page**
+
+
+### Incident report
+
+(Draft: replace the bracketed parts with your real observations.)
+
+**1. What failed.** The catalog-service Deployment was scaled to zero replicas, so no catalog Pod existed and the Market page could not load catalog data. All other services stayed healthy.
+
+**2. How the failure was detected.** The Market page showed \[what you saw\]. `kubectl get pods` showed no catalog-service Pod, and `kubectl get endpoints catalog-service` showed \[`<none>`\], meaning the Service had nothing to send traffic to.
+
+**3. What the logs showed.** The gateway logs contained \[paste or describe: errors such as connection refused or failed requests to catalog-service:8003\].
+
+**4. What action was taken.** I scaled the Deployment back up with `kubectl scale deployment/catalog-service --replicas=1`.
+
+**5. How recovery was confirmed.** The new catalog-service Pod reached `1/1 Running`, the Service endpoint was populated again, and the Market page loaded normally \[state what you verified\].
+
+**6. Diagnosing with `docker compose ps` and `docker compose logs` instead.** `docker compose ps` lists containers and their state (Up, Exited, healthy) per service, and `docker compose logs <service>` shows their combined log output, so I would see the catalog container missing or exited and read errors in the gateway log. But Compose has no Services with endpoint lists, no desired replica count, no Events and no `describe`: it cannot show that a Service has zero backends, or why a container is not running, and it does not continuously reconcile reality with a declared state (a stopped container stays stopped unless its restart policy applies). In Kubernetes I could see the desired versus actual replicas, the empty endpoints and the Pod events in one place, and recover with one declarative command.
+
+### 8f. Clean up
+
+After collecting all evidence and finishing the PVC deletion explanation \[and the optional test\], I deleted the cluster with `kind delete cluster --name netiks`.
+
+<img width="659" height="126" alt="image" src="https://github.com/user-attachments/assets/61a39eff-7b69-497a-a9bc-6c1dbcb37a7a" />
+
+## Repository Evidence
+
+<img width="828" height="816" alt="23" src="https://github.com/user-attachments/assets/49b232db-cd9d-444d-851f-54247a1b073f" />
+
+
+
+The repository contains all twelve manifests: kind-config.yaml, 00-namespace.yaml, 01-configmap.yaml, 02-secret.example.yaml, 10-postgres.yaml, 20-catalog-service.yaml, 21-identity-service.yaml, 22-vendor-service.yaml, 23-media-service.yaml, 24-admin-service.yaml, 25-gateway.yaml, 30-web.yaml. The gateway version change from Part 8c is its own commit. No real Secret values, real Secret YAML or `kubectl get secret -o yaml` output appear in the repository, Git history or this document.
+
+## Short Questions
+
+**1. One reason running the database in the same cluster is acceptable for this lab, and one reason to use a managed database in production.**
+
+For this lab, an in-cluster PostgreSQL keeps everything standalone, free and local (no cloud account or cost) and teaches StatefulSets and persistent volumes, and it can be recreated from the manifests. In production a managed database is better because the provider handles automated backups with point-in-time recovery, patching and high-availability failover, which are hard to get right when you run a stateful database yourself on a single disk.
+
+**2. The readiness endpoint returns ready even when the database is unreachable. How does this weaken Kubernetes' protection of traffic, and what should a better check verify?**
+
+Kubernetes relies on the readiness result to decide which Pods may receive traffic. If a Pod reports ready while its database is unreachable, it stays in the Service endpoints and keeps receiving requests that will fail with errors, instead of being taken out of rotation. It also weakens rolling updates: a new version with a broken database setting would look healthy, so the rollout would continue and replace working Pods. A better readiness check should verify real dependencies: open a connection to PostgreSQL and run a trivial query such as `SELECT 1` with a short timeout, and for the gateway confirm that the services it depends on are reachable. The liveness check should stay lightweight and should not test the database, otherwise a database outage would make Kubernetes restart healthy Pods needlessly.
+
+**3. Which parts of this deployment would you automate so a push to main updates the cluster?**
+
+I would automate, in a CI/CD pipeline (for example GitHub Actions): running tests and linting and validating the manifests; building the seven images on every push and tagging them with the commit SHA instead of a fixed tag such as `v1`; pushing them to a container registry (which removes the manual `kind load` step); updating the image tags in the manifests (or with Kustomize or Helm); applying the manifests with `kubectl apply` or a GitOps tool such as Argo CD or Flux; running `kubectl rollout status` after deployment and rolling back automatically if it fails; and creating the Secret from the pipeline's or a secret manager's protected store rather than from Git.
+
+## Submission
+
+
 # Terraform Infrastructure for Netiks Store on Azure
 
 ## Week 7 — Additional Task: Infrastructure as Code with Terraform
 
 **Date**: 2nd October 2026
 **Lab**: Week 7 Additional Task — Infrastructure as Code
-**Repository**: [github.com/laoluafolami/netiks_store_wk7](https://github.com/laoluafolami/netiks_store_wk7)
+**Repository**: [github.com/laoluafolami/netiks_store_wk7](https://github.com/laoluafolami/netiks_store_wk7/edit/k8s-lab/README.md)
 
+---
+End of submission.
 ---
 
 ## Executive Summary

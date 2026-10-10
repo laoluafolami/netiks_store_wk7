@@ -1,4 +1,4 @@
-<img width="878" height="367" alt="17" src="https://github.com/user-attachments/assets/453ac9de-6dbd-4e47-8345-fdf257ef15e9" /><img width="855" height="389" alt="16" src="https://github.com/user-attachments/assets/fc78bb17-cf5a-4fff-ac06-f6c50430b666" /># Netiks Store Kubernetes (K8s) Deployment
+# Netiks Store Kubernetes (K8s) Deployment
 
 **Repository link:** \[https://github.com/laoluafolami/netiks_store_wk7/edit/k8s-lab/README.md\]
 

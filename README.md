@@ -104,18 +104,6 @@ A Secret protects against: credentials being baked into images or written in man
 
 **`kubectl get pvc`** (PVC Bound)
 
-**\[PASTE OUTPUT\]**
-
-**`kubectl get statefulset`**
-
-**\[PASTE OUTPUT\]**
-
-**`kubectl get storageclass`**
-
-**\[PASTE OUTPUT\]**
-
-**\[INSERT SCREENSHOT 7\]**
-
 **`kubectl exec postgres-0 -- psql -U netiks_k8s -d netiks_store -c '\conninfo'`**
 
 <img width="1100" height="276" alt="8" src="https://github.com/user-attachments/assets/4c4c4408-3705-4d6b-b6be-3c7359ef7782" />

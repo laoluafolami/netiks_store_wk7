@@ -236,74 +236,67 @@ Secrets contain sensitive data that shouldn't be stored in version control or Te
 
 
 ### Gateway Connectivity Test
-```bash
-# kubectl exec commands testing service-to-service communication
-[PASTE OUTPUT HERE]
-```
+
+<img width="966" height="296" alt="image" src="https://github.com/user-attachments/assets/4cf06c3a-1a7e-4417-81e7-13ad287d60f5" />
+
 
 ### Browser Test
 
+<img width="1388" height="984" alt="Screenshot 2026-10-21 121823" src="https://github.com/user-attachments/assets/0e7cc6c0-9e58-48bc-879a-12612e41b4e7" />
+
 **Screenshot: Market page at http://localhost:3001/ (showing URL bar)**
 
-![Market Page](screenshots/part6-market-page.png)
+<img width="1451" height="990" alt="image" src="https://github.com/user-attachments/assets/05b61100-ce7a-4c81-b6e9-be83c1d0074f" />
 
-**Registration and login successful:** [Yes/No]
+**Registration and login successful:**
 
 ### Health Endpoint Tests
-```bash
-# curl http://localhost:8000/health/live
-[PASTE OUTPUT]
+
+<img width="1451" height="990" alt="image" src="https://github.com/user-attachments/assets/05b61100-ce7a-4c81-b6e9-be83c1d0074f" />
 
 # curl http://localhost:8000/health/ready
-[PASTE OUTPUT]
-```
+
+<img width="589" height="116" alt="image" src="https://github.com/user-attachments/assets/2e68433a-42ad-480e-9f99-8ad72c3d8d44" />
 
 ---
 
 ## Part 7: Deploy Production
 
-### Memory Note
-**Docker Desktop Memory:** [X GB]  
-**Staging uninstalled before production:** [Yes/No - only if < 8GB]
-
 ### Helm Install Output
-```bash
-[PASTE helm install OUTPUT for production]
-```
+
+<img width="972" height="229" alt="image" src="https://github.com/user-attachments/assets/54ac844a-acbc-46b2-9870-2688ac9cf9ed" />
 
 ### Production Resources
-```bash
-# kubectl get deploy,pods,svc,pvc -n netiks-production
-[PASTE OUTPUT HERE]
-```
+
+<img width="956" height="679" alt="image" src="https://github.com/user-attachments/assets/7c6db81d-b7cf-47ec-ae0a-bc0f8e40a7ea" />
 
 **Screenshot: Production pods showing 2 replicas for gateway and web**
 
-![Production Pods](screenshots/part7-production-pods.png)
-
 ### Port-Forward Test
-```bash
-# kubectl port-forward command
-[PASTE COMMAND]
+
+<img width="782" height="148" alt="image" src="https://github.com/user-attachments/assets/a266f640-64dc-4f7d-beb3-836c86d8bdcc" />
+
 
 # curl http://localhost:8080/health/live
-[PASTE OUTPUT]
+
+<img width="520" height="102" alt="image" src="https://github.com/user-attachments/assets/ea0ff1dd-2f30-4e28-ad5d-ebce98c7ae0b" />
+
 
 # curl http://localhost:8080/health/ready
-[PASTE OUTPUT]
-```
+
+<img width="605" height="88" alt="image" src="https://github.com/user-attachments/assets/6d353cc7-26bc-4928-b4b5-d2cddb2eb8b4" />
+
 
 ### Release Values Comparison
 
+<img width="702" height="225" alt="image" src="https://github.com/user-attachments/assets/2e116a49-98d0-438e-aee7-4b662ee74d4e" />
+
 **Staging values:**
-```yaml
-[PASTE helm get values netiks-staging -n netiks-staging OUTPUT]
-```
 
 **Production values:**
-```yaml
-[PASTE helm get values netiks-production -n netiks-production OUTPUT]
-```
+
+<img width="635" height="223" alt="image" src="https://github.com/user-attachments/assets/ae6cfb93-6bc3-4245-b371-2aa458ad794d" />
+
 
 ### What Differs and Why
 
@@ -319,66 +312,64 @@ Secrets contain sensitive data that shouldn't be stored in version control or Te
 ### Part 8.1: Upgrade from Command Line
 
 **Upgrade command:**
-```bash
-[PASTE helm upgrade command with --set services.gateway.tag=v2]
-```
+
+<img width="965" height="187" alt="image" src="https://github.com/user-attachments/assets/e3e85e57-631c-4222-8484-2d7847318300" />
+
+***Helm upgrade command with --set services.gateway.tag=v2***
+
 
 **Helm history:**
-```bash
-[PASTE helm history netiks-staging -n netiks-staging OUTPUT]
-```
+
+<img width="887" height="103" alt="image" src="https://github.com/user-attachments/assets/d1b2239e-fab8-4a3a-a8ef-cab0b38064c8" />
+
 
 **Gateway image running:**
-```bash
-# kubectl get pods ... -o jsonpath showing gateway:v2
-[PASTE OUTPUT]
-```
+
+<img width="803" height="103" alt="image" src="https://github.com/user-attachments/assets/a844d742-0f9d-41f9-8b65-7f123160cb2d" />
 
 **Screenshot: Gateway pod running v2 image**
-
-![Gateway v2](screenshots/part8-gateway-v2.png)
 
 ### Part 8.2: Zero Downtime
 
 **Request loop running during upgrade:**
-```
-[PASTE sample output showing continuous successful requests]
-```
 
-**Did any request fail?** [Yes/No]
+<img width="498" height="349" alt="image" src="https://github.com/user-attachments/assets/6ab39e9b-3474-4b57-8d85-c519c039c704" />
+<img width="955" height="208" alt="image" src="https://github.com/user-attachments/assets/e7ff424e-fb83-4ade-8dad-5962d3c63e8e" />
 
-**Explanation:** [If no failures: Rolling update ensures new pods are ready before old ones are terminated, maintaining service continuity. If failures occurred: explain what happened]
+
+**Did any request fail?** [No]
+
+**Explanation:** Rolling update ensures new pods are ready before old ones are terminated, maintaining service continuity.
 
 ### Part 8.3: Failed Upgrade
 
 **Upgrade command with --atomic:**
-```bash
-[PASTE helm upgrade command with --set services.gateway.tag=nonexistent --atomic]
-```
 
 **What happened:**
-```
-[PASTE OUTPUT showing deployment failure and automatic rollback]
-```
+
+<img width="977" height="142" alt="image" src="https://github.com/user-attachments/assets/56ff60a3-84ca-4349-bc01-354dfa408418" />
+
 
 **Helm history showing rollback:**
-```bash
-[PASTE helm history OUTPUT showing failed revision and rollback]
-```
 
-**Did traffic keep working?** [Yes/No - should be Yes due to automatic rollback]
+<img width="1133" height="155" alt="image" src="https://github.com/user-attachments/assets/c2dfff2a-8c4e-4370-b21b-8606a7459be8" />
+
+
+**Did traffic keep working?** [Yes - due to automatic rollback]
+
+<img width="706" height="101" alt="image" src="https://github.com/user-attachments/assets/3281a02e-f27c-452e-a64d-4b0993477d1f" />
 
 ### Part 8.4: Manual Rollback
 
 **Rollback command:**
-```bash
-[PASTE helm rollback command]
-```
+
+<img width="808" height="78" alt="image" src="https://github.com/user-attachments/assets/c1dd9f24-e741-415a-9164-744dcb0103b5" />
+
 
 **Helm history after manual rollback:**
-```bash
-[PASTE helm history OUTPUT]
-```
+
+<img width="1147" height="173" alt="image" src="https://github.com/user-attachments/assets/d4b2f69f-3274-4c5d-91cf-6eb65c90c91a" />
+
 
 ### Question: Configuration Drift Problem
 
@@ -403,49 +394,51 @@ Either (1) commit the tag change to values-staging.yaml and always upgrade from 
 **Test:** Scale web deployment to 10 replicas to exceed the max pods quota in staging (limit: 12 pods).
 
 ### Scale Command and Result
-```bash
-# kubectl scale deployment web --replicas=10 -n netiks-staging
-[PASTE OUTPUT]
+
+<img width="921" height="72" alt="image" src="https://github.com/user-attachments/assets/ca60358d-0baa-466c-8cbb-e94c1b0d83e2" />
+
 
 # kubectl get pods -n netiks-staging
-[PASTE OUTPUT showing some pods Pending]
+
+<img width="720" height="254" alt="image" src="https://github.com/user-attachments/assets/06143357-a26e-40b2-ab17-1be732d4ed7a" />
+
+***OUTPUT showing some pods Pending***
 
 # kubectl get events showing quota exceeded error
-[PASTE OUTPUT]
-```
+
+<img width="1571" height="400" alt="image" src="https://github.com/user-attachments/assets/83685aaa-9ded-4c87-8625-ab2955624ea6" />
 
 **Screenshot: Pods in Pending state with quota error**
 
-![Quota Exceeded](screenshots/part9-quota-exceeded.png)
 
 ### Increase Quota via Terraform
 
 **Modified terraform.tfvars:**
-```hcl
-[PASTE changed max_pods value]
-```
+
+<img width="800" height="303" alt="image" src="https://github.com/user-attachments/assets/c0e7e489-e960-42c1-b9f1-ec5d436eae96" />
+
 
 **Terraform apply output:**
-```
-[PASTE OUTPUT]
-```
+
+<img width="1002" height="359" alt="image" src="https://github.com/user-attachments/assets/0cd2ee62-9b4d-4c47-a5b2-e48b063aa406" />
+
 
 **Pods now running:**
-```bash
-[PASTE kubectl get pods showing all 10 web replicas running]
-```
+
+<img width="636" height="254" alt="image" src="https://github.com/user-attachments/assets/2b1647ba-c295-4cf3-8732-08bce2165237" />
+
 
 ### Restore Quota
 
 **Terraform apply with original values:**
-```
-[PASTE OUTPUT]
-```
+
+<img width="971" height="347" alt="image" src="https://github.com/user-attachments/assets/aea147ee-9225-42bd-b67c-606ed5ab3c16" />
+
 
 **Scale back down:**
-```bash
-[PASTE kubectl scale command]
-```
+
+<img width="740" height="61" alt="image" src="https://github.com/user-attachments/assets/8cec4c32-188e-4c72-a05e-aca9393f8f6b" />
+
 
 ### Question: What does this protect you from, and what would the cloud version look like?
 

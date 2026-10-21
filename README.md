@@ -425,8 +425,7 @@ Either (1) commit the tag change to values-staging.yaml and always upgrade from 
 
 **Pods now running:**
 
-<img width="636" height="254" alt="image" src="https://github.com/user-attachments/assets/2b1647ba-c295-4cf3-8732-08bce2165237" />
-
+<img width="695" height="207" alt="image" src="https://github.com/user-attachments/assets/12fe8ab2-7ef0-4ae8-88f3-2dfa4b124284" />
 
 ### Restore Quota
 
@@ -451,42 +450,44 @@ This protects against runaway resource consumption from bugs (infinite loops, me
 ### Destruction Process
 
 **Commands executed:**
-```bash
-[PASTE destruction commands: helm uninstall, terraform destroy for both folders]
-```
 
-**Destruction time:** [X] seconds
+<img width="733" height="147" alt="image" src="https://github.com/user-attachments/assets/fe8cf6c3-d959-4cb3-ad90-437362be51d8" />
+
+**Destruction time:** 53 seconds
 
 **Verification - nothing remains:**
-```bash
-# kubectl get all --all-namespaces (should show only kube-system)
-[PASTE OUTPUT]
+
+<img width="900" height="487" alt="image" src="https://github.com/user-attachments/assets/38e36694-1eb0-4642-ab47-7241e7425265" />
 
 # kind get clusters (should be empty)
-[PASTE OUTPUT]
-```
+
+<img width="705" height="71" alt="image" src="https://github.com/user-attachments/assets/c54172ad-6bb0-449c-854e-7a507d7c9b93" />
+
 
 ### Rebuild Process
 
 **Commands executed:**
-```bash
-[PASTE rebuild commands: terraform apply, load images, create secrets, helm install]
-```
 
-**Rebuild time:** [X] seconds
+<img width="1224" height="382" alt="image" src="https://github.com/user-attachments/assets/ef53ab1f-0b3e-4891-b798-f2da27b78e1e" />
+<img width="1056" height="423" alt="image" src="https://github.com/user-attachments/assets/d850b4d1-a8c4-4f84-bca3-d5e488b6a352" />
+<img width="833" height="154" alt="image" src="https://github.com/user-attachments/assets/82763ad3-629a-43bb-9cf0-edfec5060b1b" />
+<img width="926" height="154" alt="image" src="https://github.com/user-attachments/assets/ea56a769-f8cf-42de-904c-4e9c37538a20" />
+
+
+**Rebuild time:** 10 minutes
 
 **Final verification:**
-```bash
-# kubectl get pods -n netiks-staging
-[PASTE OUTPUT]
+
+<img width="594" height="198" alt="image" src="https://github.com/user-attachments/assets/1d52a5f6-8c68-4844-ada8-d2208f7f1a49" />
+
+
 
 # kubectl get pods -n netiks-production
-[PASTE OUTPUT]
-```
+
+<img width="586" height="227" alt="Screenshot 2026-10-21 181948" src="https://github.com/user-attachments/assets/16973078-a2e2-4ee2-aeec-b593c0e44f77" />
 
 **Screenshot: Both environments running after rebuild**
 
-![Rebuild Complete](screenshots/part10-rebuild.png)
 
 ### Anything Missing?
 

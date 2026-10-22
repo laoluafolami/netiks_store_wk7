@@ -1,3 +1,595 @@
+# Netiks Store: Platform Lab
+
+---
+## Part 1: Understand the Roles
+
+### Question 1: What does Terraform own in this lab, and what does Helm own? Why not one tool for both?
+
+Terraform owns the infrastructure layer (kind cluster, namespaces, and resource quotas), while Helm owns the application deployment (pods, services, deployments). They serve different purposes: Terraform manages infrastructure lifecycle and state, while Helm packages and versions application releases. Using both separates infrastructure concerns from application concerns, allowing different teams to manage each independently.
+
+### Question 2: What does a Terraform state file store, and why must it not be committed?
+
+The state file stores the actual current state of your infrastructure (resource IDs, metadata, and configuration). It must not be committed because it can contain sensitive data like passwords, and committing it creates conflicts when multiple people work on the same infrastructure, leading to state drift and potential resource destruction.
+
+### Question 3: What is a Helm release? What can `helm rollback` do that deleting a Pod cannot?
+
+A Helm release is a versioned instance of a chart deployed to a cluster, including all its resources and configuration. `helm rollback` restores the entire application to a previous working configuration atomically across all resources (deployments, services, configmaps), whereas deleting a Pod only removes one component and doesn't restore previous configurations or settings.
+
+### Question 4: Why does this lab use two separate Terraform folders, `cluster` and `platform`?
+
+The cluster folder manages the kind cluster itself (long-lived infrastructure), while the platform folder manages namespaces and quotas (application environment). This separation allows you to create/destroy environments independently without recreating the cluster, and reflects real-world separation between cluster operators and platform teams.
+
+---
+
+## Part 2: Create the Cluster with Terraform
+
+### Terraform Plan Output
+
+<img width="1092" height="1009" alt="image" src="https://github.com/user-attachments/assets/75f3b0b0-2abc-46aa-bfd0-3fdcdf8e557a" />
+<img width="1078" height="299" alt="image" src="https://github.com/user-attachments/assets/64f8df10-7931-4c99-9fe8-84ae84e4cd31" />
+
+
+
+### Terraform Apply Output
+
+<img width="1257" height="996" alt="image" src="https://github.com/user-attachments/assets/c94f3189-b82f-4a3f-949d-33630184e80e" />
+<img width="1433" height="968" alt="image" src="https://github.com/user-attachments/assets/4d9b4349-3b64-49a5-8aa8-6f4883164a15" />
+
+
+### Cluster Verification
+
+<img width="791" height="175" alt="image" src="https://github.com/user-attachments/assets/ca5b1cd5-82e3-40aa-ab05-c4f383302551" />
+
+**Screenshot: kubectl get nodes showing Ready status**
+
+### Kind Clusters List
+
+<img width="826" height="200" alt="image" src="https://github.com/user-attachments/assets/a2ba66e2-0bda-4690-9f7f-1e2eac762afb" />
+
+
+### Images Loaded in Kind
+
+<img width="1006" height="323" alt="image" src="https://github.com/user-attachments/assets/93e22b1d-5d31-445a-a3d2-4cb98714e88f" />
+
+
+### Second Plan (No Changes)
+
+<img width="907" height="228" alt="image" src="https://github.com/user-attachments/assets/85885773-e2a0-4d48-9cd6-4e2b80516f20" />
+
+***Terraform plan OUTPUT showing "No changes"***
+
+
+---
+
+## Part 3: Create the Environments with Terraform
+
+### Terraform Plan Output
+
+<img width="921" height="653" alt="image" src="https://github.com/user-attachments/assets/ad5c6112-be96-4f13-b554-873b37df0a17" />
+
+
+### Terraform Apply Output
+
+<img width="916" height="652" alt="image" src="https://github.com/user-attachments/assets/1f55c95b-b7c8-46b2-99c4-5ba8082fbea1" />
+
+
+### Namespace Verification
+
+<img width="802" height="233" alt="image" src="https://github.com/user-attachments/assets/9e1dd201-9f95-4a03-bd46-c0464ea8e433" />
+
+
+### Resource Quota - Staging
+
+<img width="813" height="238" alt="image" src="https://github.com/user-attachments/assets/ac9e7da9-75ed-4023-bea0-3a99fef44dc3" />
+
+**Screenshot: Resource quota for netiks-staging**
+
+
+### Resource Quota - Production
+
+<img width="762" height="233" alt="image" src="https://github.com/user-attachments/assets/6b3b8658-eba0-4455-a132-056cd6f1e4e4" />
+
+
+### Quota Calculation Explanation
+
+**Resource Requirements per Service (from values.yaml):**
+- Gateway: 100m CPU, 128Mi memory request, 256Mi limit
+- Web: 100m CPU, 256Mi memory request, 512Mi limit  
+- Backend services (identity, vendor, catalog, media, admin): 50m CPU each, 128Mi memory request, 256Mi limit each
+- Postgres: 100m CPU, 256Mi memory request, 512Mi limit
+
+**Staging Calculation (1 replica of each service):**
+- Pods: 1 gateway + 1 web + 5 backend services + 1 postgres = **8 pods**
+- CPU requests: 100m (gateway) + 100m (web) + 5×50m (backends) + 100m (postgres) = **550m**
+- Memory requests: 128Mi + 256Mi + 5×128Mi + 256Mi = **1280Mi = ~1.25Gi**
+- Memory limits: 256Mi + 512Mi + 5×256Mi + 512Mi = **2560Mi = ~2.5Gi**
+- Rolling update buffer: Need space for duplicate pods during updates
+- **Quota set:** CPU: **1000m (1 core)**, Memory requests: **2Gi**, Memory limits: **4Gi**, Max pods: **15**
+- **Reasoning:** Provides ~82% headroom for rolling updates and scaling spikes while preventing runaway resource consumption
+
+**Production Calculation (2 gateway, 2 web, 1 of others):**
+- Pods: 2 gateway + 2 web + 5 backend services + 1 postgres = **10 pods**
+- CPU requests: 2×100m + 2×100m + 5×50m + 100m = **750m**
+- Memory requests: 2×128Mi + 2×256Mi + 5×128Mi + 256Mi = **1664Mi = ~1.6Gi**
+- Memory limits: 2×256Mi + 2×512Mi + 5×256Mi + 512Mi = **3584Mi = ~3.5Gi**
+- Rolling update buffer: Higher capacity needed for 2-replica services
+- **Quota set:** CPU: **2000m (2 cores)**, Memory requests: **3Gi**, Memory limits: **5Gi**, Max pods: **25**
+- **Reasoning:** Accommodates high-availability replicas with sufficient overhead for zero-downtime rolling updates and unexpected load spikes
+
+### Drift Test
+
+**Manual change to quota:**
+
+<img width="910" height="136" alt="image" src="https://github.com/user-attachments/assets/224551b1-52b4-4081-bdf4-047074eff866" />
+
+
+**Terraform plan detecting drift:**
+
+<img width="904" height="549" alt="image" src="https://github.com/user-attachments/assets/aaed6762-704e-4abc-b8d1-277bb720b446" />
+
+
+**Terraform apply fixing drift:**
+
+<img width="908" height="609" alt="image" src="https://github.com/user-attachments/assets/264b3537-2504-4074-afdd-248d805704c5" />
+
+**Drift Explanation:**
+Drift occurs when manual changes bypass Terraform, causing infrastructure to deviate from code. Terraform plan detects this by comparing state with actual resources, and apply corrects it by reverting to the configuration defined in code.
+
+---
+
+## Part 4: Secrets
+
+### Secret Creation Commands
+```bash
+# Commands used (without actual secret values)
+kubectl create secret generic netiks-secrets --namespace=netiks-staging --from-literal=POSTGRES_USER=netiks_user --from-literal=POSTGRES_PASSWORD=<generated> --from-literal=JWT_SECRET_KEY=<generated>
+kubectl create secret generic netiks-secrets --namespace=netiks-production --from-literal=POSTGRES_USER=netiks_user --from-literal=POSTGRES_PASSWORD=<generated> --from-literal=JWT_SECRET_KEY=<generated>
+```
+
+### Secret Verification
+
+<img width="802" height="176" alt="image" src="https://github.com/user-attachments/assets/342837ad-0608-470c-a949-7565305b0ab4" />
+
+### Question: Why create the Secret outside Terraform and Helm? What do real teams use?
+
+Secrets contain sensitive data that shouldn't be stored in version control or Terraform state files. Creating them outside keeps them out of Git history and state files. Real teams use secret management tools like Azure Key Vault, AWS Secrets Manager, or HashiCorp Vault that inject secrets at runtime without storing them in code.
+
+---
+
+## Part 5: Package the App as a Helm Chart
+
+### Helm Lint Output
+
+<img width="641" height="197" alt="image" src="https://github.com/user-attachments/assets/31cb99e2-1b75-4c0c-9c60-bc84f2a31e2d" />
+
+
+### Comparison Table: Manifests vs Chart Templates
+
+| Service | Component | Original Manifest | Helm Template Output | Match |
+|---------|-----------|-------------------|---------------------|-------|
+| **catalog-service** | Image | netiks/catalog-service:v1 | netiks/catalog-service:v1 | ✓ |
+| | Port | 8003 | 8003 | ✓ |
+| | Startup probe | path: /health/live, periodSeconds: 3, failureThreshold: 30 | path: /health/live, periodSeconds: 3, failureThreshold: 30 | ✓ |
+| | Liveness probe | path: /health/live, periodSeconds: 10 | path: /health/live, periodSeconds: 10 | ✓ |
+| | Readiness probe | path: /health/ready, periodSeconds: 5 | path: /health/ready, periodSeconds: 5 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| | Init container | wait-for-postgres | wait-for-postgres | ✓ |
+| **identity-service** | Image | netiks/identity-service:v1 | netiks/identity-service:v1 | ✓ |
+| | Port | 8001 | 8001 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **vendor-service** | Image | netiks/vendor-service:v1 | netiks/vendor-service:v1 | ✓ |
+| | Port | 8002 | 8002 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **media-service** | Image | netiks/media-service:v1 | netiks/media-service:v1 | ✓ |
+| | Port | 8004 | 8004 | ✓ |
+| | Strategy | Recreate | Recreate | ✓ |
+| | Volume | media-uploads PVC (1Gi) | media-uploads PVC (1Gi) | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **admin-service** | Image | netiks/admin-service:v1 | netiks/admin-service:v1 | ✓ |
+| | Port | 8005 | 8005 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **gateway** | Image | netiks/gateway:v1 | netiks/gateway:v1 | ✓ |
+| | Port | 8000 | 8000 | ✓ |
+| | Replicas (original) | 2 | 1 (staging), 2 (production) | ✓* |
+| | NodePort | 30800 | 30800 (staging only) | ✓ |
+| | CPU request | Not defined | 100m | ⚠ Enhanced |
+| | Memory request | Not defined | 128Mi | ⚠ Enhanced |
+| | Memory limit | Not defined | 256Mi | ⚠ Enhanced |
+| **web** | Image | netiks/web:v1 | netiks/web:v1 | ✓ |
+| | Port | 3000 | 3000 | ✓ |
+| | Replicas (original) | 2 | 1 (staging), 2 (production) | ✓* |
+| | NodePort | 30300 | 30300 (staging only) | ✓ |
+| | CPU request | 100m | 100m | ✓ |
+| | Memory request | 256Mi | 256Mi | ✓ |
+| | Memory limit | 1Gi | 512Mi | ⚠ Optimized |
+| **postgres** | Image | postgres:16-alpine | postgres:16-alpine | ✓ |
+| | Port | 5432 | 5432 | ✓ |
+| | Storage (PVC) | 1Gi | 1Gi | ✓ |
+| | CPU request | 100m | 100m | ✓ |
+| | Memory request | 256Mi | 256Mi | ✓ |
+| | Memory limit | 512Mi | 512Mi | ✓ |
+
+**Notes:**
+- ✓* Replicas now configurable per environment (staging: 1, production: 2)
+- ⚠ Enhanced: Gateway now has resource definitions for better quota management
+- ⚠ Optimized: Web memory limit reduced from 1Gi to 512Mi for better resource efficiency
+
+### Per-Service Tag Override Test
+
+<img width="900" height="115" alt="image" src="https://github.com/user-attachments/assets/55bbf497-e6bf-4890-b618-78e8cb97f5be" />
+
+ ***helm template with --set services.gateway.tag=v2***
+
+### Design Choices Explanation
+
+**Chart design decisions:**
+- Used a map-based loop for backend services to reduce duplication and ensure consistency across similar services
+- Separated gateway and web into dedicated templates due to unique requirements (NodePort configuration, resource definitions)
+- Made image tags overridable per service via `services.<name>.tag` to enable independent service upgrades without affecting others
+- Kept probe configurations in templates rather than values because health check paths and timings rarely change
+- Made NodePorts conditionally rendered based on environment values to support both local (with NodePort) and cloud (without NodePort) deployments
+- Used `enableServiceLinks: false` consistently to prevent environment variable conflicts
+- Preserved media-service's `Recreate` strategy and PVC mounting for data consistency
+
+---
+
+## Part 6: Deploy and Test Staging
+
+### Helm Install Output
+
+<img width="959" height="162" alt="image" src="https://github.com/user-attachments/assets/155f80a1-6ead-4cb1-be47-ed34f499b2cb" />
+
+
+### Staging Resources
+
+<img width="960" height="665" alt="image" src="https://github.com/user-attachments/assets/da90ec3a-3b34-4193-b6f7-38aa6977a30f" />
+
+**Screenshot: All pods running in staging namespace**
+
+
+### Quota Usage
+
+<img width="708" height="181" alt="image" src="https://github.com/user-attachments/assets/19884a51-e9d8-4cd2-be7d-c563f71146c9" />
+
+***kubectl describe resourcequota netiks-staging-quota -n netiks-staging***
+
+
+### Gateway Connectivity Test
+
+<img width="966" height="296" alt="image" src="https://github.com/user-attachments/assets/4cf06c3a-1a7e-4417-81e7-13ad287d60f5" />
+
+
+### Browser Test
+
+<img width="1388" height="984" alt="Screenshot 2026-10-21 121823" src="https://github.com/user-attachments/assets/0e7cc6c0-9e58-48bc-879a-12612e41b4e7" />
+
+**Screenshot: Market page at http://localhost:3001/ (showing URL bar)**
+
+<img width="1451" height="990" alt="image" src="https://github.com/user-attachments/assets/05b61100-ce7a-4c81-b6e9-be83c1d0074f" />
+
+**Registration and login successful:**
+
+### Health Endpoint Tests
+
+<img width="1451" height="990" alt="image" src="https://github.com/user-attachments/assets/05b61100-ce7a-4c81-b6e9-be83c1d0074f" />
+
+# curl http://localhost:8000/health/ready
+
+<img width="589" height="116" alt="image" src="https://github.com/user-attachments/assets/2e68433a-42ad-480e-9f99-8ad72c3d8d44" />
+
+---
+
+## Part 7: Deploy Production
+
+### Helm Install Output
+
+<img width="972" height="229" alt="image" src="https://github.com/user-attachments/assets/54ac844a-acbc-46b2-9870-2688ac9cf9ed" />
+
+### Production Resources
+
+<img width="956" height="679" alt="image" src="https://github.com/user-attachments/assets/7c6db81d-b7cf-47ec-ae0a-bc0f8e40a7ea" />
+
+**Screenshot: Production pods showing 2 replicas for gateway and web**
+
+### Port-Forward Test
+
+<img width="782" height="148" alt="image" src="https://github.com/user-attachments/assets/a266f640-64dc-4f7d-beb3-836c86d8bdcc" />
+
+
+# curl http://localhost:8080/health/live
+
+<img width="520" height="102" alt="image" src="https://github.com/user-attachments/assets/ea0ff1dd-2f30-4e28-ad5d-ebce98c7ae0b" />
+
+
+# curl http://localhost:8080/health/ready
+
+<img width="605" height="88" alt="image" src="https://github.com/user-attachments/assets/6d353cc7-26bc-4928-b4b5-d2cddb2eb8b4" />
+
+
+### Release Values Comparison
+
+<img width="702" height="225" alt="image" src="https://github.com/user-attachments/assets/2e116a49-98d0-438e-aee7-4b662ee74d4e" />
+
+**Staging values:**
+
+**Production values:**
+
+<img width="635" height="223" alt="image" src="https://github.com/user-attachments/assets/ae6cfb93-6bc3-4245-b371-2aa458ad794d" />
+
+
+### What Differs and Why
+
+**Differences:**
+1. **Replicas:** Staging: 1 of each service (cost-effective testing). Production: 2 gateway and 2 web replicas (high availability for user-facing services)
+2. **NodePorts:** Staging: gateway nodePort 30800, web nodePort 30300 (direct browser access for testing). Production: no NodePorts (internal-only access, more secure)
+3. **Public API URL:** Staging: http://localhost:8000/api/v1 (browser access). Production: http://gateway:8000/api/v1 (internal service access only)
+
+---
+
+## Part 8: Operate
+
+### Part 8.1: Upgrade from Command Line
+
+**Upgrade command:**
+
+<img width="965" height="187" alt="image" src="https://github.com/user-attachments/assets/e3e85e57-631c-4222-8484-2d7847318300" />
+
+***Helm upgrade command with --set services.gateway.tag=v2***
+
+
+**Helm history:**
+
+<img width="887" height="103" alt="image" src="https://github.com/user-attachments/assets/d1b2239e-fab8-4a3a-a8ef-cab0b38064c8" />
+
+
+**Gateway image running:**
+
+<img width="803" height="103" alt="image" src="https://github.com/user-attachments/assets/a844d742-0f9d-41f9-8b65-7f123160cb2d" />
+
+**Screenshot: Gateway pod running v2 image**
+
+### Part 8.2: Zero Downtime
+
+**Request loop running during upgrade:**
+
+<img width="498" height="349" alt="image" src="https://github.com/user-attachments/assets/6ab39e9b-3474-4b57-8d85-c519c039c704" />
+<img width="955" height="208" alt="image" src="https://github.com/user-attachments/assets/e7ff424e-fb83-4ade-8dad-5962d3c63e8e" />
+
+
+**Did any request fail?** [No]
+
+**Explanation:** Rolling update ensures new pods are ready before old ones are terminated, maintaining service continuity.
+
+### Part 8.3: Failed Upgrade
+
+**Upgrade command with --atomic:**
+
+**What happened:**
+
+<img width="977" height="142" alt="image" src="https://github.com/user-attachments/assets/56ff60a3-84ca-4349-bc01-354dfa408418" />
+
+
+**Helm history showing rollback:**
+
+<img width="1133" height="155" alt="image" src="https://github.com/user-attachments/assets/c2dfff2a-8c4e-4370-b21b-8606a7459be8" />
+
+
+**Did traffic keep working?** [Yes - due to automatic rollback]
+
+<img width="706" height="101" alt="image" src="https://github.com/user-attachments/assets/3281a02e-f27c-452e-a64d-4b0993477d1f" />
+
+### Part 8.4: Manual Rollback
+
+**Rollback command:**
+
+<img width="808" height="78" alt="image" src="https://github.com/user-attachments/assets/c1dd9f24-e741-415a-9164-744dcb0103b5" />
+
+
+**Helm history after manual rollback:**
+
+<img width="1147" height="173" alt="image" src="https://github.com/user-attachments/assets/d4b2f69f-3274-4c5d-91cf-6eb65c90c91a" />
+
+
+### Question: Configuration Drift Problem
+
+**After step 1, what version does the cluster run and what does your values-staging.yaml in Git say?**
+
+The cluster runs gateway:v2 (because of the --set flag) but values-staging.yaml in Git still says v1 (or uses the default from values.yaml). This creates configuration drift.
+
+**What problem does that create when several people deploy from their laptops?**
+
+The next person deploying from Git will unknowingly downgrade the gateway to v1, losing the upgrade. There's no record in Git of what's actually running, making troubleshooting difficult and causing inconsistent deployments between team members.
+
+**How would you fix it?**
+
+Either (1) commit the tag change to values-staging.yaml and always upgrade from committed values files, or (2) use GitOps tools like ArgoCD or Flux that continuously sync Git repository state with cluster state, treating Git as the single source of truth and preventing drift entirely.
+
+---
+
+## Part 9: Prove the Cost Guard
+
+### Test Design
+
+**Test:** Scale web deployment to 10 replicas to exceed the max pods quota in staging (limit: 12 pods).
+
+### Scale Command and Result
+
+<img width="921" height="72" alt="image" src="https://github.com/user-attachments/assets/ca60358d-0baa-466c-8cbb-e94c1b0d83e2" />
+
+
+# kubectl get pods -n netiks-staging
+
+<img width="720" height="254" alt="image" src="https://github.com/user-attachments/assets/06143357-a26e-40b2-ab17-1be732d4ed7a" />
+
+***OUTPUT showing some pods Pending***
+
+# kubectl get events showing quota exceeded error
+
+<img width="1571" height="400" alt="image" src="https://github.com/user-attachments/assets/83685aaa-9ded-4c87-8625-ab2955624ea6" />
+
+**Screenshot: Pods in Pending state with quota error**
+
+
+### Increase Quota via Terraform
+
+**Modified terraform.tfvars:**
+
+<img width="800" height="303" alt="image" src="https://github.com/user-attachments/assets/c0e7e489-e960-42c1-b9f1-ec5d436eae96" />
+
+
+**Terraform apply output:**
+
+<img width="1002" height="359" alt="image" src="https://github.com/user-attachments/assets/0cd2ee62-9b4d-4c47-a5b2-e48b063aa406" />
+
+
+**Pods now running:**
+
+<img width="695" height="207" alt="image" src="https://github.com/user-attachments/assets/12fe8ab2-7ef0-4ae8-88f3-2dfa4b124284" />
+
+### Restore Quota
+
+**Terraform apply with original values:**
+
+<img width="971" height="347" alt="image" src="https://github.com/user-attachments/assets/aea147ee-9225-42bd-b67c-606ed5ab3c16" />
+
+
+**Scale back down:**
+
+<img width="740" height="61" alt="image" src="https://github.com/user-attachments/assets/8cec4c32-188e-4c72-a05e-aca9393f8f6b" />
+
+
+### Question: What does this protect you from, and what would the cloud version look like?
+
+This protects against runaway resource consumption from bugs (infinite loops, memory leaks), misconfigurations (accidental autoscaling to hundreds of pods), or malicious attacks. In the cloud, you'd use Azure Policy or AWS Service Quotas to set hard limits on compute instances, storage capacity, and spending per resource group or account. You could also set up cost alerts at specific thresholds and implement automatic shutdown policies for idle resources.
+
+---
+
+## Part 10: Destroy and Rebuild
+
+### Destruction Process
+
+**Commands executed:**
+
+<img width="733" height="147" alt="image" src="https://github.com/user-attachments/assets/fe8cf6c3-d959-4cb3-ad90-437362be51d8" />
+
+**Destruction time:** 53 seconds
+
+**Verification - nothing remains:**
+
+<img width="900" height="487" alt="image" src="https://github.com/user-attachments/assets/38e36694-1eb0-4642-ab47-7241e7425265" />
+
+# kind get clusters (should be empty)
+
+<img width="705" height="71" alt="image" src="https://github.com/user-attachments/assets/c54172ad-6bb0-449c-854e-7a507d7c9b93" />
+
+
+### Rebuild Process
+
+**Commands executed:**
+
+<img width="1224" height="382" alt="image" src="https://github.com/user-attachments/assets/ef53ab1f-0b3e-4891-b798-f2da27b78e1e" />
+<img width="1056" height="423" alt="image" src="https://github.com/user-attachments/assets/d850b4d1-a8c4-4f84-bca3-d5e488b6a352" />
+<img width="833" height="154" alt="image" src="https://github.com/user-attachments/assets/82763ad3-629a-43bb-9cf0-edfec5060b1b" />
+<img width="926" height="154" alt="image" src="https://github.com/user-attachments/assets/ea56a769-f8cf-42de-904c-4e9c37538a20" />
+
+
+**Rebuild time:** 10 minutes
+
+**Final verification:**
+
+<img width="594" height="198" alt="image" src="https://github.com/user-attachments/assets/1d52a5f6-8c68-4844-ada8-d2208f7f1a49" />
+
+
+
+# kubectl get pods -n netiks-production
+
+<img width="586" height="227" alt="Screenshot 2026-10-21 181948" src="https://github.com/user-attachments/assets/16973078-a2e2-4ee2-aeec-b593c0e44f77" />
+
+**Screenshot: Both environments running after rebuild**
+
+
+### Anything Missing?
+
+[List anything that wasn't automated: secrets had to be regenerated, images reloaded, etc.]
+
+### Question: In the cloud, what would you save by destroying a platform when you are not using it?
+
+You'd save compute costs (VM instances, node pools charging per hour), load balancer costs (often $20-50/month even if idle), persistent disk storage costs, and data transfer costs. For a small staging environment running 24/7 at $500/month, limiting it to work hours only (8 hours/day, 5 days/week) reduces usage by ~76%, saving approximately $380/month. Production would still run continuously for availability.
+
+---
+
+## Short Questions
+
+### Question 1: Which parts of this setup should Terraform own, and which should a pipeline own?
+
+Terraform should own long-lived infrastructure that changes infrequently: clusters, node pools, namespaces, resource quotas, IAM roles, virtual networks, and firewalls. Pipelines should own application deployments (Helm releases) that change frequently with code commits, along with environment-specific configuration updates and automated testing after deployment.
+
+### Question 2: Why is local Terraform state risky for a team, and what would you use instead?
+
+Local state files on individual laptops create conflicts when multiple people modify infrastructure simultaneously, potentially causing duplicate resource creation or accidental deletions. There's no locking mechanism to prevent concurrent modifications. Teams use remote state backends like Azure Blob Storage, AWS S3, or Terraform Cloud with state locking enabled, ensuring only one person can modify infrastructure at a time and providing a shared source of truth.
+
+### Question 3: If this platform were on AKS, what would change in the code and what would stay the same?
+
+**Changes:** Replace `kind` provider with `azurerm` provider, define AKS cluster resource with node pools, networking, and Azure AD integration. Add Azure-specific resources like virtual networks, load balancers, and managed identities. Use Azure Container Registry instead of local image loading.
+
+**Stay the same:** Helm charts remain identical (Kubernetes abstractions are platform-independent), namespace and resource quota creation using `kubernetes` provider, ConfigMap and Secret structure, deployment manifests, and service definitions all work unchanged.
+
+### Question 4: Name three ways this lab's approach would reduce a real cloud bill
+
+1. **Resource quotas** prevent runaway costs from bugs, misconfigurations, or autoscaling incidents by capping maximum resource consumption per environment
+2. **Destroying non-production environments** during off-hours (nights, weekends) eliminates 70-80% of idle compute costs for staging and development
+3. **Right-sizing environments** (small staging with 1 replica, larger production with 2-3 replicas) prevents over-provisioning and matches resource allocation to actual usage needs
+
+### Question 5: Which parts of Part 8 would you automate so a push to `main` upgrades the cluster?
+
+Automate Helm upgrade with the chart version pinned in Git, run automated health checks and smoke tests post-deployment, implement automatic rollback on test failure, and add deployment notifications to Slack/Teams. Use GitOps tools like ArgoCD or Flux that continuously watch the Git repository and automatically sync any changes to the cluster, eliminating manual `helm upgrade` commands entirely. Add approval gates for production deployments triggered by PR merges.
+
+---
+
+## Security
+
+### Git Status
+
+<img width="597" height="397" alt="image" src="https://github.com/user-attachments/assets/2eba5cbb-421e-4d78-bb78-83a1be02ed43" />
+
+### Git Files Check
+
+<img width="576" height="60" alt="image" src="https://github.com/user-attachments/assets/fd089aba-b6a2-4a18-89c8-7ec04a59f8f4" />
+
+**Confirmation:** No sensitive data, Terraform state files, or actual terraform.tfvars committed to repository or visible in Git history.
+
+---
+
+## Repository Information
+
+**Branch Name:** platform-olaolu  
+**Repository URL:** [Git repository URL]  
+**Commit Hash:** [Latest commit hash]
+
+**Files Committed:**
+- charts/netiks/ (Chart.yaml, all values files, all templates)
+- terraform/cluster/ (main.tf, variables.tf, outputs.tf, .terraform.lock.hcl)
+- terraform/platform/ (main.tf, variables.tf, terraform.tfvars.example, .terraform.lock.hcl)
+- scripts/load-images.sh
+- .gitignore (updated with Terraform exclusions)
+
+---
+
+## Conclusion
+
+This lab demonstrated how Terraform and Helm separate infrastructure management from application deployment. Terraform provides declarative infrastructure with state tracking and drift detection, while Helm packages applications for consistent multi-environment deployments. Resource quotas act as cost controls, and the ability to destroy and rebuild environments in minutes enables significant cloud cost savings through ephemeral infrastructure patterns.
+
+
 # Terraform Infrastructure for Netiks Store on Azure
 
 ## Week 7 — Additional Task: Infrastructure as Code with Terraform

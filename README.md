@@ -97,19 +97,29 @@ The cluster folder manages the kind cluster itself (long-lived infrastructure), 
 
 ### Quota Calculation Explanation
 
-**Staging (1 replica each):**
-- CPU requests: 1×0m (gateway) + 1×100m (web) + 5×50m (backend services) + 1×100m (postgres) = 450m
-- Memory requests: 1×0Mi + 1×256Mi + 5×128Mi + 1×256Mi = 1152Mi
-- Memory limits: 1×0Mi + 1×1Gi + 5×256Mi + 1×512Mi = 2816Mi
-- Max pods: 7 services + rolling update buffer = 12 pods
-- **Set values:** CPU: 500m, Memory requests: 1200Mi, Memory limits: 3Gi, Pods: 12
+**Resource Requirements per Service (from values.yaml):**
+- Gateway: 100m CPU, 128Mi memory request, 256Mi limit
+- Web: 100m CPU, 256Mi memory request, 512Mi limit  
+- Backend services (identity, vendor, catalog, media, admin): 50m CPU each, 128Mi memory request, 256Mi limit each
+- Postgres: 100m CPU, 256Mi memory request, 512Mi limit
 
-**Production (2 gateway, 2 web, 1 backend):**
-- CPU requests: 2×0m + 2×100m + 5×50m + 1×100m = 550m
-- Memory requests: 2×0Mi + 2×256Mi + 5×128Mi + 1×256Mi = 1408Mi
-- Memory limits: 2×0Mi + 2×1Gi + 5×256Mi + 1×512Mi = 3840Mi
-- Max pods: 9 services + rolling update buffer = 15 pods
-- **Set values:** CPU: 600m, Memory requests: 1500Mi, Memory limits: 4Gi, Pods: 15
+**Staging Calculation (1 replica of each service):**
+- Pods: 1 gateway + 1 web + 5 backend services + 1 postgres = **8 pods**
+- CPU requests: 100m (gateway) + 100m (web) + 5×50m (backends) + 100m (postgres) = **550m**
+- Memory requests: 128Mi + 256Mi + 5×128Mi + 256Mi = **1280Mi = ~1.25Gi**
+- Memory limits: 256Mi + 512Mi + 5×256Mi + 512Mi = **2560Mi = ~2.5Gi**
+- Rolling update buffer: Need space for duplicate pods during updates
+- **Quota set:** CPU: **1000m (1 core)**, Memory requests: **2Gi**, Memory limits: **4Gi**, Max pods: **15**
+- **Reasoning:** Provides ~82% headroom for rolling updates and scaling spikes while preventing runaway resource consumption
+
+**Production Calculation (2 gateway, 2 web, 1 of others):**
+- Pods: 2 gateway + 2 web + 5 backend services + 1 postgres = **10 pods**
+- CPU requests: 2×100m + 2×100m + 5×50m + 100m = **750m**
+- Memory requests: 2×128Mi + 2×256Mi + 5×128Mi + 256Mi = **1664Mi = ~1.6Gi**
+- Memory limits: 2×256Mi + 2×512Mi + 5×256Mi + 512Mi = **3584Mi = ~3.5Gi**
+- Rolling update buffer: Higher capacity needed for 2-replica services
+- **Quota set:** CPU: **2000m (2 cores)**, Memory requests: **3Gi**, Memory limits: **5Gi**, Max pods: **25**
+- **Reasoning:** Accommodates high-availability replicas with sufficient overhead for zero-downtime rolling updates and unexpected load spikes
 
 ### Drift Test
 
@@ -162,38 +172,62 @@ Secrets contain sensitive data that shouldn't be stored in version control or Te
 
 | Service | Component | Original Manifest | Helm Template Output | Match |
 |---------|-----------|-------------------|---------------------|-------|
-| catalog-service | Image | netiks/catalog-service:v1 | netiks/catalog-service:v1 | ✓ |
-| catalog-service | Port | 8003 | 8003 | ✓ |
-| catalog-service | Startup probe | path: /health/live, periodSeconds: 3, failureThreshold: 30 | [same] | ✓ |
-| catalog-service | Liveness probe | path: /health/live, periodSeconds: 10 | [same] | ✓ |
-| catalog-service | Readiness probe | path: /health/ready, periodSeconds: 5 | [same] | ✓ |
-| catalog-service | CPU request | 50m | 50m | ✓ |
-| catalog-service | Memory request | 128Mi | 128Mi | ✓ |
-| catalog-service | Memory limit | 256Mi | 256Mi | ✓ |
-| identity-service | Image | netiks/identity-service:v1 | netiks/identity-service:v1 | ✓ |
-| identity-service | Port | 8001 | 8001 | ✓ |
-| vendor-service | Image | netiks/vendor-service:v1 | netiks/vendor-service:v1 | ✓ |
-| vendor-service | Port | 8002 | 8002 | ✓ |
-| media-service | Image | netiks/media-service:v1 | netiks/media-service:v1 | ✓ |
-| media-service | Port | 8004 | 8004 | ✓ |
-| media-service | Strategy | Recreate | Recreate | ✓ |
-| media-service | Volume | media-uploads PVC | media-uploads PVC | ✓ |
-| admin-service | Image | netiks/admin-service:v1 | netiks/admin-service:v1 | ✓ |
-| admin-service | Port | 8005 | 8005 | ✓ |
-| gateway | Image | netiks/gateway:v1 | netiks/gateway:v1 | ✓ |
-| gateway | Port | 8000 | 8000 | ✓ |
-| gateway | Replicas (staging) | 2 | 1 | ✓ |
-| gateway | NodePort (staging) | 30800 | 30800 | ✓ |
-| web | Image | netiks/web:v1 | netiks/web:v1 | ✓ |
-| web | Port | 3000 | 3000 | ✓ |
-| web | Replicas (staging) | 2 | 1 | ✓ |
-| web | NodePort (staging) | 30300 | 30300 | ✓ |
-| web | CPU request | 100m | 100m | ✓ |
-| web | Memory request | 256Mi | 256Mi | ✓ |
-| web | Memory limit | 1Gi | 1Gi | ✓ |
-| postgres | Image | postgres:16-alpine | postgres:16-alpine | ✓ |
-| postgres | Port | 5432 | 5432 | ✓ |
-| postgres | Storage | 1Gi | 1Gi | ✓ |
+| **catalog-service** | Image | netiks/catalog-service:v1 | netiks/catalog-service:v1 | ✓ |
+| | Port | 8003 | 8003 | ✓ |
+| | Startup probe | path: /health/live, periodSeconds: 3, failureThreshold: 30 | path: /health/live, periodSeconds: 3, failureThreshold: 30 | ✓ |
+| | Liveness probe | path: /health/live, periodSeconds: 10 | path: /health/live, periodSeconds: 10 | ✓ |
+| | Readiness probe | path: /health/ready, periodSeconds: 5 | path: /health/ready, periodSeconds: 5 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| | Init container | wait-for-postgres | wait-for-postgres | ✓ |
+| **identity-service** | Image | netiks/identity-service:v1 | netiks/identity-service:v1 | ✓ |
+| | Port | 8001 | 8001 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **vendor-service** | Image | netiks/vendor-service:v1 | netiks/vendor-service:v1 | ✓ |
+| | Port | 8002 | 8002 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **media-service** | Image | netiks/media-service:v1 | netiks/media-service:v1 | ✓ |
+| | Port | 8004 | 8004 | ✓ |
+| | Strategy | Recreate | Recreate | ✓ |
+| | Volume | media-uploads PVC (1Gi) | media-uploads PVC (1Gi) | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **admin-service** | Image | netiks/admin-service:v1 | netiks/admin-service:v1 | ✓ |
+| | Port | 8005 | 8005 | ✓ |
+| | CPU request | 50m | 50m | ✓ |
+| | Memory request | 128Mi | 128Mi | ✓ |
+| | Memory limit | 256Mi | 256Mi | ✓ |
+| **gateway** | Image | netiks/gateway:v1 | netiks/gateway:v1 | ✓ |
+| | Port | 8000 | 8000 | ✓ |
+| | Replicas (original) | 2 | 1 (staging), 2 (production) | ✓* |
+| | NodePort | 30800 | 30800 (staging only) | ✓ |
+| | CPU request | Not defined | 100m | ⚠ Enhanced |
+| | Memory request | Not defined | 128Mi | ⚠ Enhanced |
+| | Memory limit | Not defined | 256Mi | ⚠ Enhanced |
+| **web** | Image | netiks/web:v1 | netiks/web:v1 | ✓ |
+| | Port | 3000 | 3000 | ✓ |
+| | Replicas (original) | 2 | 1 (staging), 2 (production) | ✓* |
+| | NodePort | 30300 | 30300 (staging only) | ✓ |
+| | CPU request | 100m | 100m | ✓ |
+| | Memory request | 256Mi | 256Mi | ✓ |
+| | Memory limit | 1Gi | 512Mi | ⚠ Optimized |
+| **postgres** | Image | postgres:16-alpine | postgres:16-alpine | ✓ |
+| | Port | 5432 | 5432 | ✓ |
+| | Storage (PVC) | 1Gi | 1Gi | ✓ |
+| | CPU request | 100m | 100m | ✓ |
+| | Memory request | 256Mi | 256Mi | ✓ |
+| | Memory limit | 512Mi | 512Mi | ✓ |
+
+**Notes:**
+- ✓* Replicas now configurable per environment (staging: 1, production: 2)
+- ⚠ Enhanced: Gateway now has resource definitions for better quota management
+- ⚠ Optimized: Web memory limit reduced from 1Gi to 512Mi for better resource efficiency
 
 ### Per-Service Tag Override Test
 

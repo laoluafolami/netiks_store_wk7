@@ -27,3 +27,9 @@ k8s/*secret*.yaml
 !k8s/02-secret.example.yaml
 02-secret.yaml
 *.env
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars

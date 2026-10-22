@@ -1,0 +1,114 @@
+{{- range $name, $service := .Values.services }}
+{{- if not (or (eq $name "gateway") (eq $name "web")) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+spec:   
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: {{ $service.port }}
+      targetPort: {{ $service.port }}
+---
+{{- if eq $name "media-service" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-uploads
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+spec:
+  replicas: {{ $service.replicas | default 1 }}
+  {{- if eq $name "media-service" }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      enableServiceLinks: false
+      {{- if $service.waitForPostgres }}
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgres -p 5432; do echo waiting for postgres; sleep 2; done
+          # ADDED RESOURCES BLOCK FOR INIT CONTAINER
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ $.Values.image.repository }}/{{ $name }}:{{ $service.tag | default $.Values.image.tag }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ $service.port }}
+          env:
+            - name: APP_NAME
+              value: {{ $name }}
+            - name: APP_PORT
+              value: {{ $service.port | quote }}
+          envFrom:
+            - configMapRef:
+                name: netiks-config
+            - secretRef:
+                name: netiks-secrets
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: {{ $service.port }}
+            periodSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: {{ $service.port }}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: {{ $service.port }}
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: {{ $service.resources.requests.cpu }}
+              memory: {{ $service.resources.requests.memory }}
+            limits:
+              memory: {{ $service.resources.limits.memory }}
+          {{- if eq $name "media-service" }}
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+          {{- end }}
+      {{- if eq $name "media-service" }}
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: media-uploads
+      {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,10 @@
+services:
+  gateway:
+    replicas: 2
+    nodePort: null
+  web:
+    replicas: 2
+    nodePort: null
+
+config:
+  publicApiBaseUrl: http://gateway:8000/api/v1

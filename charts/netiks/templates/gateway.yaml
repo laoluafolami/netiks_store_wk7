@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: {{ .Values.services.gateway.replicas }}
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: gateway
+          image: {{ .Values.image.repository }}/gateway:{{ .Values.services.gateway.tag | default .Values.image.tag }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: APP_NAME
+              value: gateway
+            - name: APP_PORT
+              value: "8000"
+          envFrom:
+            - configMapRef:
+                name: netiks-config
+            - secretRef:
+                name: netiks-secrets
+          resources:
+            requests:
+              cpu: {{ .Values.services.gateway.resources.requests.cpu }}
+              memory: {{ .Values.services.gateway.resources.requests.memory }}
+            limits:
+              memory: {{ .Values.services.gateway.resources.limits.memory }}
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            periodSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            periodSeconds: 5
+---
+{{- if .Values.services.gateway.nodePort }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-external
+spec:
+  type: NodePort
+  selector:
+    app: gateway
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: {{ .Values.services.gateway.nodePort }}
+{{- end }}

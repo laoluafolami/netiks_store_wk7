@@ -1,0 +1,102 @@
+image:
+  repository: netiks
+  tag: v1
+
+config:
+  appEnv: development
+  postgresDb: netiks_store
+  postgresHost: postgres
+  postgresPort: "5432"
+  jwtAlgorithm: HS256
+  accessTokenExpireMinutes: "60"
+  uploadDir: /app/uploads
+  publicApiBaseUrl: http://localhost:8000/api/v1
+
+postgres:
+  image: postgres
+  tag: 16-alpine
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+services:
+  identity-service:
+    port: 8001
+    replicas: 1
+    waitForPostgres: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  vendor-service:
+    port: 8002
+    replicas: 1
+    waitForPostgres: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  catalog-service:
+    port: 8003
+    replicas: 1
+    waitForPostgres: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  media-service:
+    port: 8004
+    replicas: 1
+    waitForPostgres: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  admin-service:
+    port: 8005
+    replicas: 1
+    waitForPostgres: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  gateway:
+    port: 8000
+    replicas: 1
+    nodePort: null
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  web:
+    port: 3000
+    replicas: 1
+    nodePort: null
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi

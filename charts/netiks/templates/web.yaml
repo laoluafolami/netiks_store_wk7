@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: {{ .Values.services.web.replicas }}
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: web
+          image: {{ .Values.image.repository }}/web:{{ .Values.services.web.tag | default .Values.image.tag }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: development
+          envFrom:
+            - configMapRef:
+                name: netiks-config
+          startupProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: {{ .Values.services.web.resources.requests.cpu }}
+              memory: {{ .Values.services.web.resources.requests.memory }}
+            limits:
+              memory: {{ .Values.services.web.resources.limits.memory }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  {{- if .Values.services.web.nodePort }}
+  type: NodePort
+  {{- else }}
+  type: ClusterIP
+  {{- end }}
+  selector:
+    app: web
+  ports:
+    - port: 3000
+      targetPort: 3000
+      {{- if .Values.services.web.nodePort }}
+      nodePort: {{ .Values.services.web.nodePort }}
+      {{- end }}

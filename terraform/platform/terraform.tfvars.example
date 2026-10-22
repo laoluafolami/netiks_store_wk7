@@ -1,0 +1,14 @@
+environments = {
+  netiks-staging = {
+    cpu_requests     = "500m"
+    memory_requests  = "1200Mi"
+    memory_limits    = "3Gi"
+    max_pods         = 12
+  }
+  netiks-production = {
+    cpu_requests     = "600m"
+    memory_requests  = "1500Mi"
+    memory_limits    = "4Gi"
+    max_pods         = 15
+  }
+}

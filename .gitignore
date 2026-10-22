@@ -33,3 +33,16 @@ k8s/*secret*.yaml
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+
+# Kubernetes configs
+*kubeconfig*
+*netiks-config*
+*.config
+.kube/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.tfvars.*

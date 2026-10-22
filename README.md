@@ -564,32 +564,12 @@ Automate Helm upgrade with the chart version pinned in Git, run automated health
 ## Security
 
 ### Git Status
-```bash
-[PASTE git status OUTPUT - should show no sensitive files staged]
-```
 
-### .gitignore Verification
-```bash
-[PASTE relevant lines from .gitignore:]
-.terraform/
-*.tfstate
-*.tfstate.*
-terraform.tfvars
-```
-
-### Git History Check
-```bash
-# No secrets in history
-git log --all -p | grep -i "password\|secret\|token" | wc -l
-[OUTPUT should be 0 or show only example/placeholder references]
-```
+<img width="597" height="397" alt="image" src="https://github.com/user-attachments/assets/2eba5cbb-421e-4d78-bb78-83a1be02ed43" />
 
 ### Git Files Check
-```bash
-# No terraform state or tfvars in repository
-git ls-files | grep -E "(terraform.tfvars|*.tfstate)"
-[OUTPUT should be empty, only terraform.tfvars.example should exist]
-```
+
+<img width="576" height="60" alt="image" src="https://github.com/user-attachments/assets/fd089aba-b6a2-4a18-89c8-7ec04a59f8f4" />
 
 **Confirmation:** No sensitive data, Terraform state files, or actual terraform.tfvars committed to repository or visible in Git history.
 
@@ -597,7 +577,7 @@ git ls-files | grep -E "(terraform.tfvars|*.tfstate)"
 
 ## Repository Information
 
-**Branch Name:** platform-[your-name]  
+**Branch Name:** platform-olaolu  
 **Repository URL:** [Git repository URL]  
 **Commit Hash:** [Latest commit hash]
 
@@ -614,8 +594,7 @@ git ls-files | grep -E "(terraform.tfvars|*.tfstate)"
 
 This lab demonstrated how Terraform and Helm separate infrastructure management from application deployment. Terraform provides declarative infrastructure with state tracking and drift detection, while Helm packages applications for consistent multi-environment deployments. Resource quotas act as cost controls, and the ability to destroy and rebuild environments in minutes enables significant cloud cost savings through ephemeral infrastructure patterns.
 
-**Total time invested:** [X hours]  
-**Key learning:** [Your main takeaway from this lab]
+
 
 
 ---
